@@ -50,6 +50,17 @@ type
       AV_CLASS_CATEGORY_NB ///< not part of ABI/API
   );
 
+{
+#define AV_IS_INPUT_DEVICE(category) \
+    (((category) == AV_CLASS_CATEGORY_DEVICE_VIDEO_INPUT) || \
+     ((category) == AV_CLASS_CATEGORY_DEVICE_AUDIO_INPUT) || \
+     ((category) == AV_CLASS_CATEGORY_DEVICE_INPUT))
+
+#define AV_IS_OUTPUT_DEVICE(category) \
+    (((category) == AV_CLASS_CATEGORY_DEVICE_VIDEO_OUTPUT) || \
+     ((category) == AV_CLASS_CATEGORY_DEVICE_AUDIO_OUTPUT) || \
+     ((category) == AV_CLASS_CATEGORY_DEVICE_OUTPUT))
+}
 
 type
 
@@ -181,7 +192,12 @@ const
  *)
   AV_LOG_DEBUG   = 48;
 
-  AV_LOG_MAX_OFFSET = (AV_LOG_DEBUG - AV_LOG_QUIET);
+(**
+ * Extremely verbose debugging, useful for libav* development.
+ *)
+  AV_LOG_TRACE   = 56;
+
+  AV_LOG_MAX_OFFSET = (AV_LOG_TRACE - AV_LOG_QUIET);
 
 
 (**
@@ -225,7 +241,7 @@ type
  * @see av_log_set_callback
  *
  * @param avcl A pointer to an arbitrary struct of which the first field is a
- *        pointer to an AVClass struct.
+ *        pointer to an AVClass struct or NULL if general log.
  * @param level The importance level of the message expressed using a @ref
  *        lavu_log_constants "Logging Constant".
  * @param fmt The format string (printf-compatible) that specifies how
@@ -315,7 +331,7 @@ function av_default_get_category(ptr: pointer): TAVClassCategory;
 
 (**
  * Format a line of log the same way as the default callback.
- * @param line          buffer to receive the formated line
+ * @param line          buffer to receive the formatted line
  * @param line_size     size of the buffer
  * @param print_prefix  used to store whether the prefix must be printed;
  *                      must point to a persistent integer initially set to 1
@@ -324,17 +340,19 @@ procedure av_log_format_line(ptr: pointer; level: integer; fmt: PAnsiChar; const
                         line: PAnsiChar; line_size: integer; print_prefix: PInteger);
   cdecl; external LIB_AVUTIL;
 
+{$IF FF_API_DLOG}
 (**
  * av_dlog macros
+ * @deprecated unused
  * Useful to print debug messages that shouldn't get compiled in normally.
  *)
-(** to be translated if needed
-#ifdef DEBUG
-#    define av_dlog(pctx, ...) av_log(pctx, AV_LOG_DEBUG, __VA_ARGS__)
-#else
-#    define av_dlog(pctx, ...) do { if (0) av_log(pctx, AV_LOG_DEBUG, __VA_ARGS__); } while (0)
-#endif
-**)
+
+{$IFDEF DEBUG}
+  //define av_dlog(pctx, ...) av_log(pctx, AV_LOG_DEBUG, __VA_ARGS__)
+{$ELSE}
+  //define av_dlog(pctx, ...) do { if (0) av_log(pctx, AV_LOG_DEBUG, __VA_ARGS__); } while (0)
+{$ENDIF}
+{$ENDIF} (* FF_API_DLOG *)
 
 (**
  * Skip repeated messages, this requires the user app to use av_log() instead of

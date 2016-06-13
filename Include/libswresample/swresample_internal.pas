@@ -23,7 +23,7 @@
   {$define SWR_INTERNAL_H}
 
 const
-  SWR_CH_MAX  = 32;
+  SWR_CH_MAX  = 64;
   SQRT3_2     = 1.22474487139158904909;  (* sqrt(3/2) *)
   NS_TAPS     = 20;
 
@@ -60,7 +60,7 @@ Type
 type
   PDitherContext = ^TDitherContext;
   TDitherContext = record
-    method : TSwrDitherType;
+    method : integer;
     noise_pos : integer;
     scale : Single;
     noise_scale : Single;                                     ///< Noise scale
@@ -88,8 +88,7 @@ type
   TSet_compensation_func = function(c : PResampleContext; sample_delta: integer; compensation_distance: integer): integer;
   TGet_delay_func = function(s : PSwrContext; base: int64): int64;
   TInvert_initial_buffer_func = function(c: PResampleContext; dst: PAudioData; src: PAudioData; src_size: integer; var dst_idx: integer; var dst_count: integer): integer;
-
-
+  TGet_out_samples_func = function(s: PSwrContext;  in_samples: integer): int64;
 
   PResampler = ^TResampler;
   TResampler = record
@@ -100,6 +99,7 @@ type
     set_compensation : TSet_compensation_func;
     get_delay : TGet_delay_func;
     invert_initial_buffer : TInvert_initial_buffer_func;
+    get_out_samples : TGet_out_samples_func;
   end;
 
 
@@ -120,18 +120,26 @@ type
     lfe_mix_level : Single;                            ///< LFE mixing level
     rematrix_volume : Single;                          ///< rematrixing volume coefficient
     rematrix_maxval : Single;                          ///< maximum value for rematrixing output
-    matrix_encoding : TAVMatrixEncoding;          (**< matrixed stereo encoding *)
+    matrix_encoding : integer;          (**< matrixed stereo encoding *)
     channel_map : PInteger;                         ///< channel index (or -1 if muted channel) map
     used_ch_count : Integer;                              ///< number of used input channels (mapped channel count if channel_map, otherwise in.ch_count)
-    engine : TSwrEngine;
+    engine : integer;
 
+
+    user_in_ch_count : integer;                           ///< User set input channel count
+    user_out_ch_count : integer;                          ///< User set output channel count
+    user_used_ch_count : integer;                         ///< User set used channel count
+    user_in_ch_layout : int64;                      ///< User set input channel layout
+    user_out_ch_layout : int64;                     ///< User set output channel layout
+    user_int_sample_fmt : TAVSampleFormat;        ///< User set internal sample format
+	
     dither : TDitherContext;
 
     filter_size : integer;                                (**< length of each FIR filter in the resampling filterbank relative to the cutoff frequency *)
     phase_shift : integer;                                (**< log2 of the number of entries in the resampling polyphase filterbank *)
     linear_interp : integer;                              (**< if 1 then the resampling FIR filter will be linearly interpolated *)
     cutoff : double;                                  (**< resampling cutoff frequency (swr: 6dB point; soxr: 0dB point). 1.0 corresponds to half the output sample rate *)
-    filter_type : TSwrFilterType;                 (**< swr resampling filter type *)
+    filter_type : integer;                 (**< swr resampling filter type *)
     kaiser_beta : integer;                              (**< swr beta value for Kaiser window (only applicable if filter_type == AV_FILTER_TYPE_KAISER) *)
     precision : double;                               (**< soxr resampling precision (in bits) *)
     cheby : integer;                                      (**< soxr: if 1 then passband rolloff will be none (Chebyshev) & irrational ratio approximation precision will be higher *)
@@ -162,6 +170,7 @@ type
     outpts : int64;                                 ///< output PTS
     firstpts : int64;                               ///< first PTS
     drop_output : integer;                                ///< number of output samples to drop
+    delayed_samples_fixup : double;                   ///< soxr 0.1.1: needed to fixup delayed_samples after flush has been called.
 
     in_convert : PAudioConvert;                ///< input conversion context
     out_convert : PAudioConvert;               ///< output conversion context
@@ -191,27 +200,44 @@ type
 function swri_realloc_audio(a: PAudioData; count: integer): integer;
   cdecl; external LIB_SWRESAMPLE;
 
-{void swri_noise_shaping_int16 (SwrContext *s, AudioData *dsts, const AudioData *srcs, const AudioData *noises, int count);
-void swri_noise_shaping_int32 (SwrContext *s, AudioData *dsts, const AudioData *srcs, const AudioData *noises, int count);
-void swri_noise_shaping_float (SwrContext *s, AudioData *dsts, const AudioData *srcs, const AudioData *noises, int count);
-void swri_noise_shaping_double(SwrContext *s, AudioData *dsts, const AudioData *srcs, const AudioData *noises, int count);
+procedure swri_noise_shaping_int16(s: PSwrContext; dsts: PAudioData; const srcs: PAudioData; const noises: PAudioData; count: integer);
+  cdecl; external LIB_SWRESAMPLE;
+procedure swri_noise_shaping_int32(s: PSwrContext; dsts: PAudioData; const srcs: PAudioData; const noises: PAudioData; count: integer);
+  cdecl; external LIB_SWRESAMPLE;
+procedure swri_noise_shaping_float(s: PSwrContext; dsts: PAudioData; const srcs: PAudioData; const noises: PAudioData; count: integer);
+  cdecl; external LIB_SWRESAMPLE;
+procedure swri_noise_shaping_double(s: PSwrContext; dsts: PAudioData; const srcs: PAudioData; const noises: PAudioData; count: integer);
+  cdecl; external LIB_SWRESAMPLE;
 
-int swri_rematrix_init(SwrContext *s);
-void swri_rematrix_free(SwrContext *s);
-int swri_rematrix(SwrContext *s, AudioData *out, AudioData *in, int len, int mustcopy);
-void swri_rematrix_init_x86(struct SwrContext *s);
+function swri_rematrix_init(s: PSwrContext): integer;
+  cdecl; external LIB_SWRESAMPLE;
+procedure swri_rematrix_free(s: PSwrContext);
+  cdecl; external LIB_SWRESAMPLE;
+function swri_rematrix(s: PSwrContext; _out: PAudioData; _in: PAudioData; len: integer; mustcopy: integer): integer;
+  cdecl; external LIB_SWRESAMPLE;
+function swri_rematrix_init_x86(s: PSwrContext): integer;
+  cdecl; external LIB_SWRESAMPLE;
 
-void swri_get_dither(SwrContext *s, void *dst, int len, unsigned seed, enum AVSampleFormat noise_fmt);
-int swri_dither_init(SwrContext *s, enum AVSampleFormat out_fmt, enum AVSampleFormat in_fmt);
+function swri_get_dither(s: PSwrContext; dst: Pointer; len: Integer; seed: Cardinal; noise_fmt: TAVSampleFormat): integer;
+  cdecl; external LIB_SWRESAMPLE;
 
-void swri_audio_convert_init_arm(struct AudioConvert *ac,
-                                 enum AVSampleFormat out_fmt,
-                                 enum AVSampleFormat in_fmt,
-                                 int channels);
-void swri_audio_convert_init_x86(struct AudioConvert *ac,
-                                 enum AVSampleFormat out_fmt,
-                                 enum AVSampleFormat in_fmt,
-                                 int channels);
-}
+function swri_dither_init(s: PSwrContext; var out_fmt: TAVSampleFormat; in_fmt: TAVSampleFormat): integer;
+  cdecl; external LIB_SWRESAMPLE;
+
+procedure swri_audio_convert_init_aarch64(ac: PAudioConvert;
+                                 var out_fmt: TAVSampleFormat;
+                                 in_fmt: TAVSampleFormat;
+                                 channels: integer);
+  cdecl; external LIB_SWRESAMPLE;
+procedure swri_audio_convert_init_arm(ac: PAudioConvert;
+                                 var out_fmt: TAVSampleFormat;
+                                 in_fmt: TAVSampleFormat;
+                                 channels: integer);
+  cdecl; external LIB_SWRESAMPLE;
+procedure swri_audio_convert_init_x86(ac: PAudioConvert;
+                                 var out_fmt: TAVSampleFormat;
+                                 in_fmt: TAVSampleFormat;
+                                 channels: integer);
+  cdecl; external LIB_SWRESAMPLE;
 {$endif} (* SWR_INTERNAL_H *)
 

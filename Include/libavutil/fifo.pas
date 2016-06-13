@@ -36,7 +36,7 @@ type
   //callbacks used in the functions av_fifo_generic_read and av_fifo_generic_write
   TFifo_read_func  = function(ptr1: Pointer; ptr2: Pointer; int: integer): Pointer;
   TFifo_write_func = function(ptr1: Pointer; ptr2: Pointer; int: integer): integer;
-
+  TFifo_generic_peek_func = procedure(ptr1: Pointer; ptr2: Pointer; int : integer);
 
 (**
  * Initialize an AVFifoBuffer.
@@ -92,6 +92,18 @@ function av_fifo_size(f: PAVFifoBuffer): integer;
  * @return size
  *)
 function av_fifo_space(f: PAVFifoBuffer): integer;
+  cdecl; external LIB_AVUTIL;
+
+(**
+ * Feed data from an AVFifoBuffer to a user-supplied callback.
+ * Similar as av_fifo_gereric_read but without discarding data.
+ * @param f AVFifoBuffer to read from
+ * @param buf_size number of bytes to read
+ * @param func generic read function
+ * @param dest data destination
+ *)
+
+function av_fifo_generic_peek(f: PAVFifoBuffer; dest: Pointer; buf_size: integer; func : TFifo_generic_peek_func): integer;
   cdecl; external LIB_AVUTIL;
 
 (**

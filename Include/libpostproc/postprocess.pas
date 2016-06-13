@@ -64,8 +64,10 @@ function postproc_license(): PAnsiChar;
 
 
 type
-  QP_STORE_T = shortint;
-  PQP_STORE_T = ^QP_STORE_T;
+{$IF FF_API_QP_TYPE}
+  QP_STORE_T = shortint;      //deprecated
+  PQP_STORE_T = ^QP_STORE_T;  //deprecated
+{$ENDIF}
   TByteQuadArray = array[0..3] of byte;
   PByteQuadArray = ^TByteQuadArray;
   TIntegerQuadArray = array[0..3] of integer;
@@ -95,7 +97,7 @@ type
 procedure pp_postprocess(src: PByteQuadArray; const srcStride: TIntegerQuadArray;
                      dst: PByteQuadArray; const dstStride: TIntegerQuadArray;
                      horizontalSize: integer; verticalSize: integer;
-                     QP_store: PQP_STORE_T;  QP_stride: integer;
+                     QP_store: PShortint;  QP_stride: integer;
                      mode: pp_mode; Context: pp_context; pict_type: integer);
    cdecl; external LIB_POSTPROC;
 
@@ -130,6 +132,7 @@ const
   PP_FORMAT_422     = ($00000001 or PP_FORMAT);
   PP_FORMAT_411     = ($00000002 or PP_FORMAT);
   PP_FORMAT_444     = ($00000000 or PP_FORMAT);
+  PP_FORMAT_440     = ($00000010 or PP_FORMAT);
 
   PP_PICT_TYPE_QP2  = $00000010; ///< MPEG2 style QScale
 

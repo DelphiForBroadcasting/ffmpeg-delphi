@@ -27,7 +27,6 @@
  * Buffered I/O operations
  *)
 
-
 const
   AVIO_SEEKABLE_NORMAL = $0001; (**< Seeking works like for a local file *)
 
@@ -57,6 +56,57 @@ type
   TAVIOInterruptCB = record
     callback: TCallback;
     opaque: pointer;
+  end;
+
+(**
+ * Directory entry types.
+ *)
+  TAVIODirEntryType  = (
+    AVIO_ENTRY_UNKNOWN,
+    AVIO_ENTRY_BLOCK_DEVICE,
+    AVIO_ENTRY_CHARACTER_DEVICE,
+    AVIO_ENTRY_DIRECTORY,
+    AVIO_ENTRY_NAMED_PIPE,
+    AVIO_ENTRY_SYMBOLIC_LINK,
+    AVIO_ENTRY_SOCKET,
+    AVIO_ENTRY_FILE,
+    AVIO_ENTRY_SERVER,
+    AVIO_ENTRY_SHARE,
+    AVIO_ENTRY_WORKGROUP
+  );
+  
+
+
+(**
+ * Describes single entry of the directory.
+ *
+ * Only name and type fields are guaranteed be set.
+ * Rest of fields are protocol or/and platform dependent and might be unknown.
+ *)
+  PAVIODirEntry = ^TAVIODirEntry;
+  TAVIODirEntry  = record
+    name  : PAnsiChar;                           (**< Filename *)
+    type_ : integer;                             (**< Type of the entry *)
+    utf8  : integer;                             (**< Set to 1 when name is encoded with UTF-8, 0 otherwise.
+                                               Name can be encoded with UTF-8 even though 0 is set. *)
+    size  : int64;                         (**< File size in bytes, -1 if unknown. *)
+    modification_timestamp: int64;       (**< Time of last modification in microseconds since unix
+                                               epoch, -1 if unknown. *)
+    access_timestamp : int64;             (**< Time of last access in microseconds since unix epoch,
+                                               -1 if unknown. *)
+    status_change_timestamp : int64;      (**< Time of last status change in microseconds since unix
+                                               epoch, -1 if unknown. *)
+    user_id : int64;                      (**< User ID of owner, -1 if unknown. *)
+    group_id : int64;                     (**< Group ID of owner, -1 if unknown. *)
+    filemode : int64;                     (**< Unix file mode, -1 if unknown. *)
+  end;
+
+ {$INCLUDE 'url.pas'}
+
+Type
+  PAVIODirContext = ^TAVIODirContext;
+  TAVIODirContext  = record
+    url_context : PURLContext;
   end;
 
 (**
@@ -160,6 +210,12 @@ type
     * This field is internal to libavformat and access from outside is not allowed.
     *)
     orig_buffer_size : integer;
+
+    (**
+     * Threshold to favor readahead over seek.
+     * This is current internal only, do not use from outside.
+     *)
+    short_seek_threshold : integer;
   end;
 
 (* unbuffered I/O *)
@@ -190,11 +246,82 @@ function avio_check(url: PAnsiChar; flags: integer): integer;
   cdecl; external LIB_AVFORMAT;
 
 (**
+ * Move or rename a resource.
+ *
+ * @note url_src and url_dst should share the same protocol and authority.
+ *
+ * @param url_src url to resource to be moved
+ * @param url_dst new url to resource if the operation succeeded
+ * @return >=0 on success or negative on error.
+ *)
+function avpriv_io_move(url_src: PAnsiChar; url_dst: PAnsiChar): integer;
+  cdecl; external LIB_AVFORMAT;
+
+(**
+ * Delete a resource.
+ *
+ * @param url resource to be deleted.
+ * @return >=0 on success or negative on error.
+ *)
+function avpriv_io_delete(const url: PAnsiChar): integer;
+  cdecl; external LIB_AVFORMAT;
+
+(**
+ * Open directory for reading.
+ *
+ * @param s       directory read context. Pointer to a NULL pointer must be passed.
+ * @param url     directory to be listed.
+ * @param options A dictionary filled with protocol-private options. On return
+ *                this parameter will be destroyed and replaced with a dictionary
+ *                containing options that were not found. May be NULL.
+ * @return >=0 on success or negative on error.
+ *)
+function avio_open_dir(var s: PAVIODirContext; const url: PAnsiChar; var options: PAVDictionary): integer;
+  cdecl; external LIB_AVFORMAT;
+
+(**
+ * Get next directory entry.
+ *
+ * Returned entry must be freed with avio_free_directory_entry(). In particular
+ * it may outlive AVIODirContext.
+ *
+ * @param s         directory read context.
+ * @param[out] next next entry or NULL when no more entries.
+ * @return >=0 on success or negative on error. End of list is not considered an
+ *             error.
+ *)
+function avio_read_dir(s: PAVIODirContext; var next : PAVIODirEntry): integer;
+  cdecl; external LIB_AVFORMAT;
+
+(**
+ * Close directory.
+ *
+ * @note Entries created using avio_read_dir() are not deleted and must be
+ * freeded with avio_free_directory_entry().
+ *
+ * @param s         directory read context.
+ * @return >=0 on success or negative on error.
+ *)
+function avio_close_dir(var s: PAVIODirContext): integer;
+  cdecl; external LIB_AVFORMAT;
+
+(**
+ * Free entry allocated by avio_read_dir().
+ *
+ * @param entry entry to be freed.
+ *)
+procedure avio_free_directory_entry(var entry: PAVIODirEntry);
+  cdecl; external LIB_AVFORMAT;
+
+(**
  * Allocate and initialize an AVIOContext for buffered I/O. It must be later
  * freed with av_free().
  *
  * @param buffer Memory block for input/output operations via AVIOContext.
  *        The buffer must be allocated with av_malloc() and friends.
+ *        It may be freed and replaced with a new buffer by libavformat.
+ *        AVIOContext.buffer holds the buffer currently in use,
+ *        which must be later freed with av_free().
  * @param buffer_size The buffer size is very important for performance.
  *        For protocols with fixed blocksize it should be set to this blocksize.
  *        For others a typical size is a cache page, e.g. 4kb.
@@ -246,9 +373,22 @@ function avio_put_str(s: PAVIOContext; str: PAnsiChar): integer;
 
 (**
  * Convert an UTF-8 string to UTF-16LE and write it.
+ * @param s the AVIOContext
+ * @param str NULL-terminated UTF-8 string
+ *
  * @return number of bytes written.
  *)
 function avio_put_str16le(s: PAVIOContext; str: PAnsiChar): integer;
+  cdecl; external LIB_AVFORMAT;
+
+(**
+ * Convert an UTF-8 string to UTF-16BE and write it.
+ * @param s the AVIOContext
+ * @param str NULL-terminated UTF-8 string
+ *
+ * @return number of bytes written.
+ *)
+function avio_put_str16be(s: PAVIOContext; const str: PAnsiChar): integer;
   cdecl; external LIB_AVFORMAT;
 
 const
@@ -288,8 +428,6 @@ function avio_skip(s: PAVIOContext; offset: int64): int64;
 function avio_tell(s: PAVIOContext): int64; inline; // Note: see in avformat.pas
 
 
-
-
 (**
  * Get the filesize.
  * @return filesize or AVERROR
@@ -316,10 +454,14 @@ function avio_printf(s: PAVIOContext; fmt: PAnsiChar; args: array of const): int
   cdecl; external LIB_AVFORMAT;
 
 (**
- * Force flushing of buffered data to the output s.
+ * Force flushing of buffered data.
  *
- * Force the buffered data to be immediately written to the output,
+ * For write streams, force the buffered data to be immediately written to the output,
  * without to wait to fill the internal buffer.
+ *
+ * For read streams, discard all currently buffered data, and advance the
+ * reported file position to that of the underlying stream. This does not
+ * read new data, and does not perform any seeks.
  *)
 procedure avio_flush(s: PAVIOContext);
   cdecl; external LIB_AVFORMAT;
@@ -499,7 +641,7 @@ function avio_open_dyn_buf(s: PPAVIOContext): integer;
 (**
  * Return the written size and a pointer to the buffer. The buffer
  * must be freed with av_free().
- * Padding of FF_INPUT_BUFFER_PADDING_SIZE is added to the buffer.
+ * Padding of AV_INPUT_BUFFER_PADDING_SIZE is added to the buffer.
  *
  * @param s IO context
  * @param pbuffer pointer to a byte buffer
@@ -565,6 +707,38 @@ type
  * code otherwise
  *)
 function avio_read_to_bprint(h: PAVIOContext; pb: PAVBPrint; max_size: cardinal): integer;
+  cdecl; external LIB_AVFORMAT;
+
+(**
+ * Accept and allocate a client context on a server context.
+ * @param  s the server context
+ * @param  c the client context, must be unallocated
+ * @return   >= 0 on success or a negative value corresponding
+ *           to an AVERROR on failure
+ *)
+function avio_accept(s: PAVIOContext; var c: PAVIOContext): integer;
+  cdecl; external LIB_AVFORMAT;
+
+(**
+ * Perform one step of the protocol handshake to accept a new client.
+ * This function must be called on a client returned by avio_accept() before
+ * using it as a read/write context.
+ * It is separate from avio_accept() because it may block.
+ * A step of the handshake is defined by places where the application may
+ * decide to change the proceedings.
+ * For example, on a protocol with a request header and a reply header, each
+ * one can constitute a step because the application may use the parameters
+ * from the request to change parameters in the reply; or each individual
+ * chunk of the request can constitute a step.
+ * If the handshake is already finished, avio_handshake() does nothing and
+ * returns 0 immediately.
+ *
+ * @param  c the client context to perform the handshake on
+ * @return   0   on a complete and successful handshake
+ *           > 0 if the handshake progressed, but is not complete
+ *           < 0 for an AVERROR code
+ *)
+function avio_handshake(c: PAVIOContext): integer;
   cdecl; external LIB_AVFORMAT;
 
 {$endif} (* AVFORMAT_AVIO_H *)

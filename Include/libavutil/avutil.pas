@@ -160,14 +160,6 @@ uses
  *
  * @{
  *
- * @defgroup lavu_internal Internal
- *
- * Not exported functions, for internal usage only
- *
- * @{
- *
- * @}
- *
  * @defgroup preproc_misc Preprocessor String Macros
  *
  * @{
@@ -191,6 +183,14 @@ uses
  * Return the LIBAVUTIL_VERSION_INT constant.
  *)
 function avutil_version(): cardinal;
+  cdecl; external LIB_AVUTIL;
+
+(**
+ * Return an informative version string. This usually is the actual release
+ * version number or a git commit description. This string has no fixed format
+ * and can change any time. It should never be parsed by code.
+ *)
+function av_version_info(): PAnsiChar;
   cdecl; external LIB_AVUTIL;
 
 (**
@@ -321,6 +321,8 @@ function av_get_picture_type_char(pict_type: TAVPictureType): PAnsiChar;
 {$INCLUDE time.pas}
 
 {$INCLUDE timecode.pas}
+
+{$INCLUDE parseutils.pas}
 
 (**
  * Return x default pointer in case p is NULL.

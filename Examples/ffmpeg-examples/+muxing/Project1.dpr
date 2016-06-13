@@ -207,7 +207,7 @@ begin
 
   (* Some formats want stream headers to be separate. *)
    if ((oc^.oformat^.flags and AVFMT_GLOBALHEADER) > 0) then
-       c^.flags := c^.flags or CODEC_FLAG_GLOBAL_HEADER;
+       c^.flags := c^.flags or AV_CODEC_FLAG_GLOBAL_HEADER;
 end;
 
 (**************************************************************)
@@ -276,7 +276,7 @@ begin
 
 
 
-  if (c^.codec^.capabilities and CODEC_CAP_VARIABLE_FRAME_SIZE) > 0 then
+  if (c^.codec^.capabilities and AV_CODEC_CAP_VARIABLE_FRAME_SIZE) > 0 then
     nb_samples := 10000
   else
     nb_samples := c^.frame_size;

@@ -352,7 +352,7 @@ function avdevice_dev_to_app_control_message(s : PAVFormatContext;
  * Following API allows user to probe device capabilities (supported codecs,
  * pixel formats, sample formats, resolutions, channel counts, etc).
  * It is build on top op AVOption API.
- * Queried capabilities allows to set up converters of video or audio
+ * Queried capabilities make it possible to set up converters of video or audio
  * parameters that fit to the device.
  *
  * List of capabilities that can be queried:
@@ -525,6 +525,30 @@ function avdevice_list_devices(s: PAVFormatContext; var device_list : PAVDeviceI
  * @param devices device list to be freed.
  *)
 procedure avdevice_free_list_devices(var device_list: PAVDeviceInfoList);
+	cdecl; external LIB_AVDEVICE;
+
+(**
+ * List devices.
+ *
+ * Returns available device names and their parameters.
+ * These are convinient wrappers for avdevice_list_devices().
+ * Device context is allocated and deallocated internally.
+ *
+ * @param device           device format. May be NULL if device name is set.
+ * @param device_name      device name. May be NULL if device format is set.
+ * @param device_options   An AVDictionary filled with device-private options. May be NULL.
+ *                         The same options must be passed later to avformat_write_header() for output
+ *                         devices or avformat_open_input() for input devices, or at any other place
+ *                         that affects device-private options.
+ * @param[out] device_list list of autodetected devices
+ * @return count of autodetected devices, negative on error.
+ * @note device argument takes precedence over device_name when both are set.
+ *)
+function avdevice_list_input_sources(device: PAVInputFormat; const device_name: PAnsiChar;
+                                device_options: PAVDictionary; var device_list: PAVDeviceInfoList): integer;
+	cdecl; external LIB_AVDEVICE;
+function avdevice_list_output_sinks(device: PAVInputFormat; const device_name: PAnsiChar;
+                               device_options: PAVDictionary; var device_list: PAVDeviceInfoList): integer;
 	cdecl; external LIB_AVDEVICE;
 
 implementation

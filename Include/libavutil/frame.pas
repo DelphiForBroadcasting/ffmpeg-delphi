@@ -92,7 +92,32 @@ const
      * Active Format Description data consisting of a single byte as specified
      * in ETSI TS 101 154 using AVActiveFormatDescription enum.
      *)
-    AV_FRAME_DATA_AFD
+    AV_FRAME_DATA_AFD,
+    (**
+     * Motion vectors exported by some codecs (on demand through the export_mvs
+     * flag set in the libavcodec AVCodecContext flags2 option).
+     * The data is the AVMotionVector struct defined in
+     * libavutil/motion_vector.h.
+     *)
+    AV_FRAME_DATA_MOTION_VECTORS,
+    (**
+     * Recommmends skipping the specified number of samples. This is exported
+     * only if the "skip_manual" AVOption is set in libavcodec.
+     * This has the same format as AV_PKT_DATA_SKIP_SAMPLES.
+     * @code
+     * u32le number of samples to skip from start of this packet
+     * u32le number of samples to skip from end of this packet
+     * u8    reason for start skip
+     * u8    reason for end   skip (0=padding silence, 1=convergence)
+     * @endcode
+     *)
+    AV_FRAME_DATA_SKIP_SAMPLES,
+
+    (**
+     * This side data must be associated with an audio frame and corresponds to
+     * enum AVAudioServiceType defined in avcodec.h.
+     *)
+    AV_FRAME_DATA_AUDIO_SERVICE_TYPE
   ); (* verified: mail@freehand.com.ua; 2014-08-26: + *)
 
   TAVActiveFormatDescription = (
@@ -105,6 +130,12 @@ const
     AV_AFD_SP_4_3       = 15
   ); (* verified: mail@freehand.com.ua; 2014-08-26: + *)
 
+(**
+ * Structure to hold side data for an AVFrame.
+ *
+ * sizeof(AVFrameSideData) is not a part of the public ABI, so new fields may be added
+ * to the end with a minor bump.
+ *)
   PPAVFrameSideData = ^PAVFrameSideData;
   PAVFrameSideData = ^TAVFrameSideData;
   TAVFrameSideData = record
@@ -112,6 +143,7 @@ const
     data  : PByte;
     size  : integer;
     metadata  : PAVDictionary;
+    buf : PAVBufferRef;
   end; (* verified: mail@freehand.com.ua; 2014-08-26: + *)
 
 (**
@@ -162,7 +194,7 @@ const
      * For audio, only linesize[0] may be set. For planar audio, each channel
      * plane must be the same size.
      *
-     * For video the linesizes should be multiplies of the CPUs alignment
+     * For video the linesizes should be multiples of the CPUs alignment
      * preference, this is 16 or 32 for modern desktop CPUs.
      * Some code requires such alignment other code can be slower without
      * correct alignment, for yet other it makes no difference.
@@ -439,7 +471,9 @@ const
 
     (**
      * AVBuffer references backing the data for this frame. If all elements of
-     * this array are NULL, then this frame is not reference counted.
+     * this array are NULL, then this frame is not reference counted. This array
+     * must be filled contiguously -- if buf[i] is non-NULL then buf[j] must
+     * also be non-NULL for all j < i.
      *
      * There may be at most one AVBuffer per data plane, so for video this array
      * always contains all the references. For planar audio with more than
@@ -502,7 +536,7 @@ const
 
     (**
      * frame timestamp estimated using various heuristics, in stream time base
-     * Code outside libavcodec should access this field using:
+     * Code outside libavutil should access this field using:
      * av_frame_get_best_effort_timestamp(frame)
      * - encoding: unused
      * - decoding: set by libavcodec, read by user.
@@ -511,7 +545,7 @@ const
 
     (**
      * reordered pos from the last AVPacket that has been input into the decoder
-     * Code outside libavcodec should access this field using:
+     * Code outside libavutil should access this field using:
      * av_frame_get_pkt_pos(frame)
      * - encoding: unused
      * - decoding: Read by user.
@@ -521,7 +555,7 @@ const
     (**
      * duration of the corresponding packet, expressed in
      * AVStream->time_base units, 0 if unknown.
-     * Code outside libavcodec should access this field using:
+     * Code outside libavutil should access this field using:
      * av_frame_get_pkt_duration(frame)
      * - encoding: unused
      * - decoding: Read by user.
@@ -530,7 +564,7 @@ const
 
     (**
      * metadata.
-     * Code outside libavcodec should access this field using:
+     * Code outside libavutil should access this field using:
      * av_frame_get_metadata(frame)
      * - encoding: Set by user.
      * - decoding: Set by libavcodec.
@@ -541,7 +575,7 @@ const
      * decode error flags of the frame, set to a combination of
      * FF_DECODE_ERROR_xxx flags if the decoder produced a frame, but there
      * were errors during the decoding.
-     * Code outside libavcodec should access this field using:
+     * Code outside libavutil should access this field using:
      * av_frame_get_decode_error_flags(frame)
      * - encoding: unused
      * - decoding: set by libavcodec, read by user.
@@ -552,7 +586,7 @@ const
 
     (**
      * number of audio channels, only used for audio.
-     * Code outside libavcodec should access this field using:
+     * Code outside libavutil should access this field using:
      * av_frame_get_channels(frame)
      * - encoding: unused
      * - decoding: Read by user.
@@ -565,7 +599,7 @@ const
      * av_frame_set_pkt_size().
      * It is set to a negative value if unknown.
      * - encoding: unused
-     * - decoding: set by libavcodec, read by user.
+     * - decoding: set by libavutil, read by user.
      *)
     pkt_size: integer;
 
@@ -578,7 +612,7 @@ const
 (**
  * Accessors for some AVFrame fields.
  * The position of these field in the structure is not part of the ABI,
- * they should not be accessed directly outside libavcodec.
+ * they should not be accessed directly outside libavutil.
  *)
 function  av_frame_get_best_effort_timestamp(frame: PAVFrame): int64;
   cdecl; external LIB_AVUTIL; (* verified: mail@freehand.com.ua; 2014-09-01: + *)
@@ -692,7 +726,7 @@ procedure av_frame_unref(frame: PAVFrame);
   cdecl; external LIB_AVUTIL; (* verified: mail@freehand.com.ua; 2014-08-27: + *)
 
 (**
- * Move everythnig contained in src to dst and reset src.
+ * Move everything contained in src to dst and reset src.
  *)
 procedure av_frame_move_ref(dst, src: PAVFrame);
   cdecl; external LIB_AVUTIL;

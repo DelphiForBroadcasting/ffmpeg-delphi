@@ -43,18 +43,21 @@ const
   AV_CPU_FLAG_SSE4          = $0100;     ///< Penryn SSE4.1 functions
   AV_CPU_FLAG_SSE42         = $0200;     ///< Nehalem SSE4.2 functions
   AV_CPU_FLAG_AVX           = $4000;     ///< AVX functions: requires OS support even if YMM registers aren't used
+  AV_CPU_FLAG_AVXSLOW       = $8000000;  ///< AVX supported, but slow when using YMM registers (e.g. Bulldozer)
   AV_CPU_FLAG_XOP           = $0400;     ///< Bulldozer XOP functions
   AV_CPU_FLAG_FMA4          = $0800;     ///< Bulldozer FMA4 functions
  
   AV_CPU_FLAG_CMOV          = $1001000;  ///< supports cmov instruction
   
   AV_CPU_FLAG_AVX2          = $8000;     ///< AVX2 functions: requires OS support even if YMM registers aren't used
-  AV_CPU_FLAG_FMA3          = $10000; ///< Haswell FMA3 functions
-  AV_CPU_FLAG_BMI1          = $20000; ///< Bit Manipulation Instruction Set 1
-  AV_CPU_FLAG_BMI2          = $40000; ///< Bit Manipulation Instruction Set 2
+  AV_CPU_FLAG_FMA3          = $10000;    ///< Haswell FMA3 functions
+  AV_CPU_FLAG_BMI1          = $20000;    ///< Bit Manipulation Instruction Set 1
+  AV_CPU_FLAG_BMI2          = $40000;    ///< Bit Manipulation Instruction Set 2
 
 
-  AV_CPU_FLAG_ALTIVEC       = $0001;     ///< standard
+  AV_CPU_FLAG_ALTIVEC       = $0001;    ///< standard
+  AV_CPU_FLAG_VSX           = $0002;    ///< ISA 2.06
+  AV_CPU_FLAG_POWER8        = $0004;    ///< ISA 2.07
 
   AV_CPU_FLAG_ARMV5TE       = (1 Shl 0);
   AV_CPU_FLAG_ARMV6         = (1 Shl 1);
@@ -63,6 +66,7 @@ const
   AV_CPU_FLAG_VFPV3         = (1 Shl 4);
   AV_CPU_FLAG_NEON          = (1 Shl 5);
   AV_CPU_FLAG_ARMV8         = (1 Shl 6);
+  AV_CPU_FLAG_SETEND        = (1 shl 16);
 
 
 (**

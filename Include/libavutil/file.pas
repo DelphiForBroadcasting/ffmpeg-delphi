@@ -53,7 +53,8 @@ procedure av_file_unmap(bufptr: PByte; size: integer);
  * Wrapper to work around the lack of mkstemp() on mingw.
  * Also, tries to create file in /tmp first, if possible.
  * *prefix can be a character constant; *filename will be allocated internally.
- * @return file descriptor of opened file (or -1 on error)
+ * @return file descriptor of opened file (or negative value corresponding to an
+ * AVERROR code on error)
  * and opened file name in **filename.
  * @note On very old libcs it is necessary to set a secure umask before
  *       calling this, av_tempfile() can't call umask itself as it is used in

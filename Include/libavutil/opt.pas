@@ -202,7 +202,7 @@
  * In some cases it may be more convenient to put all options into an
  * AVDictionary and call av_opt_set_dict() on it. A specific case of this
  * are the format/codec open functions in lavf/lavc which take a dictionary
- * filled with option as a parameter. This allows to set some options
+ * filled with option as a parameter. This makes it possible to set some options
  * that cannot be set otherwise, since e.g. the input file format is not known
  * before the file is actually opened.
  *)
@@ -218,6 +218,7 @@ type
       AV_OPT_TYPE_STRING,
       AV_OPT_TYPE_RATIONAL,
       AV_OPT_TYPE_BINARY,  ///< offset must point to a pointer immediately followed by an int for the length
+      AV_OPT_TYPE_DICT,
       AV_OPT_TYPE_CONST = 128,
       AV_OPT_TYPE_IMAGE_SIZE     = $53495A45,  // MKBETAG('S','I','Z','E'), offset must point to two consecutive integers
       AV_OPT_TYPE_PIXEL_FMT      = $50464D54,  // MKBETAG('P','F','M','T')
@@ -225,7 +226,6 @@ type
       AV_OPT_TYPE_VIDEO_RATE     = $56524154,   // MKBETAG('V','R','A','T'), offset must point to TAVRational
       AV_OPT_TYPE_DURATION       = $44555220,  // MKBETAG('D','U','R',' '),
       AV_OPT_TYPE_COLOR          = $434F4C52,  // MKBETAG('C','O','L','R'),
-
   {$IF FF_API_OLD_AVOPTIONS}
       AV_OPT_TYPE_CHANNEL_LAYOUT = $43484C41,  // MKBETAG('C','H','L','A'),
       FF_OPT_TYPE_FLAGS = 0,
@@ -388,26 +388,6 @@ type
 
 {$INCLUDE log.pas}
 
-
-{$IF FF_API_FIND_OPT}
-(**
- * Look for an option in obj. Look only for the options which
- * have the flags set as specified in mask and flags (that is,
- * for which it is the case that (opt->flags & mask) == flags).
- *
- * @param[in] obj a pointer to a struct whose first element is a
- * pointer to an AVClass
- * @param[in] name the name of the option to look for
- * @param[in] unit the unit of the option to look for, or any if NULL
- * @return a pointer to the option found, or NULL if no option
- * has been found
- *
- * @deprecated use av_opt_find.
- *)
-function av_find_opt(obj: Pointer; name: PAnsiChar;  unit_: PAnsiChar; mask: integer; flags: integer): PAVOption;
-  cdecl; external LIB_AVUTIL; deprecated 'use av_opt_find';
-{$ENDIF}
-
 {$IF FF_API_OLD_AVOPTIONS}
 (**
  * Set the field of obj with the given name to value.
@@ -445,12 +425,11 @@ function av_set_int   (obj: pointer; name: PAnsiChar; n: int64): PAVOption;
   cdecl; external LIB_AVUTIL; deprecated 'use av_opt_set()';
 
 function av_get_double(obj: pointer; name: PAnsiChar; var o_out: PAVOption): double;
-  cdecl; external LIB_AVUTIL;
+  cdecl; external LIB_AVUTIL; deprecated;
 function av_get_q     (obj: pointer; name: PAnsiChar; var o_out: PAVOption): TAVRational;
-  cdecl; external LIB_AVUTIL;
+  cdecl; external LIB_AVUTIL; deprecated;
 function av_get_int   (obj: pointer; name: PAnsiChar; var o_out: PAVOption): int64;
-  cdecl; external LIB_AVUTIL;
-
+  cdecl; external LIB_AVUTIL; deprecated;
 function av_get_string(obj: pointer; name: PAnsiChar; var o_out: PAVOption; buf: PAnsiChar; buf_len: integer): PAnsiChar;
   cdecl; external LIB_AVUTIL; deprecated;
 function av_next_option(obj: pointer; last: PAVOption): PAVOption;
@@ -477,10 +456,18 @@ function av_opt_show2(obj: pointer; av_log_obj: pointer; req_flags: integer; rej
 procedure av_opt_set_defaults(s: pointer);
   cdecl; external LIB_AVUTIL;
 
-{$IF FF_API_OLD_AVOPTIONS}
+(**
+ * Set the values of all AVOption fields to their default values. Only these
+ * AVOption fields for which (opt->flags & mask) == flags will have their
+ * default applied to s.
+ *
+ * @param s an AVOption-enabled struct (its first member must be a pointer to AVClass)
+ * @param mask combination of AV_OPT_FLAG_*
+ * @param flags combination of AV_OPT_FLAG_*
+ *)
 procedure av_opt_set_defaults2(s: Pointer; mask: integer; flags: integer);
   cdecl; external LIB_AVUTIL; deprecated;
-{$ENDIF}
+
 
 (**
  * Parse the key/value pairs list in opts. For each key/value pair
@@ -496,7 +483,7 @@ procedure av_opt_set_defaults2(s: Pointer; mask: integer; flags: integer);
  * @return the number of successfully set key/value pairs, or a negative
  * value corresponding to an AVERROR code in case of error:
  * AVERROR(EINVAL) if opts cannot be parsed,
- * the error code issued by av_set_string3() if a key/value pair
+ * the error code issued by av_opt_set() if a key/value pair
  * cannot be set
 *)
 function av_set_options_string(ctx: pointer; opts: PAnsiChar;
@@ -536,7 +523,7 @@ function av_opt_set_from_string(ctx: pointer; opts: PAnsiChar;
   cdecl; external LIB_AVUTIL;
 
 (**
- * Free all string and binary options in obj.
+ * Free all allocated objects in obj.
  *)
 procedure av_opt_free(obj: pointer);
   cdecl; external LIB_AVUTIL;
@@ -683,7 +670,7 @@ const
  *         was found.
  *
  * @note Options found with AV_OPT_SEARCH_CHILDREN flag may not be settable
- * directly with av_set_string3(). Use special calls which take an options
+ * directly with av_opt_set(). Use special calls which take an options
  * AVDictionary (e.g. avformat_open_input()) to set options found with this
  * flag.
  *)
@@ -792,6 +779,12 @@ function av_opt_set_video_rate(obj: pointer; name: PAnsiChar; val: TAVRational; 
   cdecl; external LIB_AVUTIL;
 function av_opt_set_channel_layout(obj: pointer; name: PAnsiChar; ch_layout: int64; search_flags: integer): integer;
   cdecl; external LIB_AVUTIL;
+(**
+ * @note Any old dictionary present is discarded and replaced with a copy of the new one. The
+ * caller still owns val is and responsible for freeing it.
+ *)
+function av_opt_set_dict_val(obj: pointer; name: PAnsiChar; const val: PAVDictionary; search_flags: integer): integer;
+  cdecl; external LIB_AVUTIL;
 
 (**
  * Set a binary option to an integer list.
@@ -851,6 +844,13 @@ function av_opt_get_video_rate(obj: pointer; name: PAnsiChar; search_flags: inte
 function av_opt_get_channel_layout(obj: pointer; name: PAnsiChar; search_flags: integer; ch_layout: PInt64): integer;
   cdecl; external LIB_AVUTIL;
 (**
+ * @param[out] out_val The returned dictionary is a copy of the actual value and must
+ * be freed with av_dict_free() by the caller
+ *)
+function av_opt_get_dict_val(obj: pointer; name: PAnsiChar; search_flags: integer; var out_val: PAVDictionary): integer;
+  cdecl; external LIB_AVUTIL;
+
+(**
  * @
  *)
 (**
@@ -885,6 +885,16 @@ procedure av_opt_freep_ranges(ranges: PPAVOptionRanges);
 function av_opt_query_ranges(P: PPAVOptionRanges; obj: pointer; key: PAnsiChar; flags: integer): integer;
   cdecl; external LIB_AVUTIL;
 
+(**
+ * Copy options from src object into dest object.
+ *
+ * Options that require memory allocation (e.g. string or binary) are malloc'ed in dest object.
+ * Original memory allocated for such options is freed unless both src and dest options points to the same memory.
+ *
+ * @param dest Object to copy from
+ * @param src  Object to copy into
+ * @return 0 on success, negative on error
+ *)
 function av_opt_copy(dest : Pointer; src : Pointer): integer;
   cdecl; external LIB_AVUTIL;
 
@@ -902,6 +912,60 @@ function av_opt_copy(dest : Pointer; src : Pointer): integer;
  * @return >= 0 on success, a negative errro code otherwise
  *)
 function av_opt_query_ranges_default(P: PPAVOptionRanges; obj: pointer; key: PAnsiChar; flags: integer): integer;
+  cdecl; external LIB_AVUTIL;
+
+(**
+ * Check if given option is set to its default value.
+ *
+ * Options o must belong to the obj. This function must not be called to check child's options state.
+ * @see av_opt_is_set_to_default_by_name().
+ *
+ * @param obj  AVClass object to check option on
+ * @param o    option to be checked
+ * @return     >0 when option is set to its default,
+ *              0 when option is not set its default,
+ *             <0 on error
+ *)
+function av_opt_is_set_to_default(obj: pointer; const o: PAVOption): integer;
+  cdecl; external LIB_AVUTIL;
+
+(**
+ * Check if given option is set to its default value.
+ *
+ * @param obj          AVClass object to check option on
+ * @param name         option name
+ * @param search_flags combination of AV_OPT_SEARCH_*
+ * @return             >0 when option is set to its default,
+ *                     0 when option is not set its default,
+ *                     <0 on error
+ *)
+function av_opt_is_set_to_default_by_name(obj: pointer; const name: PAnsiChar; search_flags: integer): integer;
+  cdecl; external LIB_AVUTIL;
+
+const
+  AV_OPT_SERIALIZE_SKIP_DEFAULTS              = $00000001;  ///< Serialize options that are not set to default values only.
+  AV_OPT_SERIALIZE_OPT_FLAGS_EXACT            = $00000002;  ///< Serialize options that exactly match opt_flags only.
+
+(**
+ * Serialize object's options.
+ *
+ * Create a string containing object's serialized options.
+ * Such string may be passed back to av_opt_set_from_string() in order to restore option values.
+ * A key/value or pairs separator occurring in the serialized value or
+ * name string are escaped through the av_escape() function.
+ *
+ * @param[in]  obj           AVClass object to serialize
+ * @param[in]  opt_flags     serialize options with all the specified flags set (AV_OPT_FLAG)
+ * @param[in]  flags         combination of AV_OPT_SERIALIZE_* flags
+ * @param[out] buffer        Pointer to buffer that will be allocated with string containg serialized options.
+ *                           Buffer must be freed by the caller when is no longer needed.
+ * @param[in]  key_val_sep   character used to separate key from value
+ * @param[in]  pairs_sep     character used to separate two pairs from each other
+ * @return                   >= 0 on success, negative on error
+ * @warning Separators cannot be neither '\\' nor '\0'. They also cannot be the same.
+ *)
+function av_opt_serialize(obj: pointer; opt_flags: integer; flags: integer; var buffer: PAnsiChar;
+                     const key_val_sep: AnsiChar; const pairs_sep: AnsiChar): integer;
   cdecl; external LIB_AVUTIL;
 
 (**

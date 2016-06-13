@@ -199,6 +199,17 @@ function av_strdup(s: PAnsiChar): PAnsiChar;
   cdecl; external LIB_AVUTIL;
 
 (**
+ * Duplicate a substring of the string s.
+ * @param s string to be duplicated
+ * @param len the maximum length of the resulting string (not counting the
+ *            terminating byte).
+ * @return Pointer to a newly-allocated string containing a
+ * copy of s or NULL if the string cannot be allocated.
+ *)
+function av_strndup(s: PAnsiChar; len: cardinal): PAnsiChar;
+  cdecl; external LIB_AVUTIL;
+
+(**
  * Duplicate the buffer p.
  * @param p buffer to be duplicated
  * @return Pointer to a newly allocated buffer containing a

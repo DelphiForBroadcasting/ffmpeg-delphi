@@ -119,6 +119,8 @@ function av_dict_count(m: PAVDictionary): integer;
 
 (**
  * Set the given entry in *pm, overwriting an existing entry.
+ * Note: If AV_DICT_DONT_STRDUP_KEY or AV_DICT_DONT_STRDUP_VAL is set,
+ * these arguments will be freed on error.
  *
  * @param pm pointer to a pointer to a dictionary struct. If *pm is NULL
  * a dictionary struct is allocated and put in *pm.
@@ -129,6 +131,15 @@ function av_dict_count(m: PAVDictionary): integer;
  *)
 function av_dict_set(var pm: PAVDictionary; key: PAnsiChar; value: PAnsiChar; flags: integer): integer;
   cdecl; external LIB_AVUTIL; (* verified: mail@freehand.com.ua, 2014-09-05: + *)
+
+(**
+ * Convenience wrapper for av_dict_set that converts the value to a string
+ * and stores it.
+ *
+ * Note: If AV_DICT_DONT_STRDUP_KEY is set, key will be freed on error.
+ *)
+function av_dict_set_int(var pm: PAVDictionary; key: PAnsiChar; value: int64; flags: integer): integer;
+  cdecl; external LIB_AVUTIL;
 
 (**
  * Parse the key/value pairs list and add the parsed entries to a dictionary.
@@ -167,6 +178,25 @@ procedure av_dict_copy(dst: PPAVDictionary; src: PAVDictionary; flags: integer);
  * and all keys and values.
  *)
 procedure av_dict_free(var m: PAVDictionary);
+  cdecl; external LIB_AVUTIL;
+
+(*
+ * Get dictionary entries as a string.
+ *
+ * Create a string containing dictionary's entries.
+ * Such string may be passed back to av_dict_parse_string().
+ * @note String is escaped with backslashes ('\').
+ *
+ * @param[in]  m             dictionary
+ * @param[out] buffer        Pointer to buffer that will be allocated with string containg entries.
+ *                           Buffer must be freed by the caller when is no longer needed.
+ * @param[in]  key_val_sep   character used to separate key from value
+ * @param[in]  pairs_sep     character used to separate two pairs from each other
+ * @return                   >= 0 on success, negative on error
+ * @warning Separators cannot be neither '\\' nor '\0'. They also cannot be the same.
+ *)
+function av_dict_get_string(m: PAVDictionary; var buffer: PAnsiChar;
+                       const key_val_sep: AnsiChar; const pairs_sep: AnsiChar): integer;
   cdecl; external LIB_AVUTIL;
 
 {$endif} (* AVUTIL_DICT_H *)

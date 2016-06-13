@@ -143,6 +143,14 @@ function av_nearer_q(q: TAVRational; q1: TAVRational; q2: TAVRational): integer;
 function av_find_nearest_q_idx(q: TAVRational; q_list: PAVRational): integer;
   cdecl; external LIB_AVUTIL;
 
+(**
+ * Converts a AVRational to a IEEE 32bit float.
+ *
+ * The float is returned in a uint32_t and its value is platform indepenant.
+ *)
+function av_q2intfloat(q: TAVRational): cardinal;
+  cdecl; external LIB_AVUTIL;
+
 {$endif} (* AVUTIL_RATIONAL_H *)
 
 

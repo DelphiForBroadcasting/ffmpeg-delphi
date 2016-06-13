@@ -85,7 +85,7 @@ uses
  * with an AVFMT_NOFILE format).
  *
  * @section lavf_options Passing options to (de)muxers
- * Lavf allows to configure muxers and demuxers using the @ref avoptions
+ * It is possible to configure muxers and demuxers using the @ref avoptions
  * mechanism. Generic (format-independent) libavformat options are provided by
  * AVFormatContext, they can be examined from a user program by calling
  * av_opt_next() / av_opt_find() on an allocated AVFormatContext (or its AVClass
@@ -95,6 +95,18 @@ uses
  * Further options may be provided by the @ref AVFormatContext.pb "I/O context",
  * if its AVClass is non-NULL, and the protocols layer. See the discussion on
  * nesting in @ref avoptions documentation to learn how to access those.
+ *
+ * @section urls
+ * URL strings in libavformat are made of a scheme/protocol, a ':', and a
+ * scheme specific string. URLs without a scheme and ':' used for local files
+ * are supported but deprecated. "file:" should be used for local files.
+ *
+ * It is important that the scheme string is not taken from untrusted
+ * sources without checks.
+ *
+ * Note that some schemes/protocols are quite powerful, allowing access to
+ * both local and remote files, parts of them, concatenations of them, local
+ * audio and video devices and so on.
  *
  * @defgroup lavf_decoding Demuxing
  * @{
@@ -106,10 +118,10 @@ uses
  * cleanup.
  *
  * @section lavf_decoding_open Opening a media file
- * The minimum information required to open a file is its URL or filename, which
+ * The minimum information required to open a file is its URL, which
  * is passed to avformat_open_input(), as in the following code:
  * @code
- * const char    *url = "in.mp3";
+ * const char    *url = "file:in.mp3";
  * AVFormatContext *s = NULL;
  * int ret = avformat_open_input(&s, url, NULL, NULL);
  * if (ret < 0)
@@ -216,6 +228,10 @@ uses
  *   be set to the timebase that the caller desires to use for this stream (note
  *   that the timebase actually used by the muxer can be different, as will be
  *   described later).
+ * - It is advised to manually initialize only the relevant fields in
+ *   AVCodecContext, rather than using @ref avcodec_copy_context() during
+ *   remuxing: there is no guarantee that the codec context values remain valid
+ *   for both input and output format contexts.
  * - The caller may fill in additional information, such as @ref
  *   AVFormatContext.metadata "global" or @ref AVStream.metadata "per-stream"
  *   metadata, @ref AVFormatContext.chapters "chapters", @ref
@@ -247,6 +263,53 @@ uses
  *
  * @defgroup lavf_io I/O Read/Write
  * @{
+ * @section lavf_io_dirlist Directory listing
+ * The directory listing API makes it possible to list files on remote servers.
+ *
+ * Some of possible use cases:
+ * - an "open file" dialog to choose files from a remote location,
+ * - a recursive media finder providing a player with an ability to play all
+ * files from a given directory.
+ *
+ * @subsection lavf_io_dirlist_open Opening a directory
+ * At first, a directory needs to be opened by calling avio_open_dir()
+ * supplied with a URL and, optionally, ::AVDictionary containing
+ * protocol-specific parameters. The function returns zero or positive
+ * integer and allocates AVIODirContext on success.
+ *
+ * @code
+ * AVIODirContext *ctx = NULL;
+ * if (avio_open_dir(&ctx, "smb://example.com/some_dir", NULL) < 0) {
+ *     fprintf(stderr, "Cannot open directory.\n");
+ *     abort();
+ * }
+ * @endcode
+ *
+ * This code tries to open a sample directory using smb protocol without
+ * any additional parameters.
+ *
+ * @subsection lavf_io_dirlist_read Reading entries
+ * Each directory's entry (i.e. file, another directory, anything else
+ * within ::AVIODirEntryType) is represented by AVIODirEntry.
+ * Reading consecutive entries from an opened AVIODirContext is done by
+ * repeatedly calling avio_read_dir() on it. Each call returns zero or
+ * positive integer if successful. Reading can be stopped right after the
+ * NULL entry has been read -- it means there are no entries left to be
+ * read. The following code reads all entries from a directory associated
+ * with ctx and prints their names to standard output.
+ * @code
+ * AVIODirEntry *entry = NULL;
+ * for (;;) {
+ *     if (avio_read_dir(ctx, &entry) < 0) {
+ *         fprintf(stderr, "Cannot list directory.\n");
+ *         abort();
+ *     }
+ *     if (!entry)
+ *         break;
+ *     printf("%s\n", entry->name);
+ *     avio_free_directory_entry(&entry);
+ * }
+ * @endcode
  * @}
  *
  * @defgroup lavf_codec Demuxers
@@ -270,7 +333,6 @@ uses
 
 
 {$INCLUDE 'version.pas'}
-
 {$INCLUDE 'avio.pas'}
 
 (**
@@ -307,6 +369,11 @@ uses
  *    -  sorting  -- a modified version of a tag that should be used for
  *       sorting will have '-sort' appended. E.g. artist="The Beatles",
  *       artist-sort="Beatles, The".
+ * - Some protocols and demuxers support metadata updates. After a successful
+ *   call to av_read_packet(), AVFormatContext.event_flags or AVStream.event_flags
+ *   will be updated to indicate if metadata changed. In order to detect metadata
+ *   changes on a stream, you need to loop through all streams in the AVFormatContext
+ *   and check their individual event_flags.
  *
  * -  Demuxers attempt to export metadata in a generic format, however tags
  *    with no generic equivalents are left as they are stored in the container.
@@ -406,7 +473,7 @@ type
     filename    : PAnsiChar;
     buf         : PByte;      (**< Buffer must have AVPROBE_PADDING_SIZE of extra allocated bytes filled with zero. *)
     buf_size    : integer;    (**< Size of buf except extra allocated bytes *)
-    mime_type   : PByte;      (**< mime_type, when known. *)
+    mime_type   : PAnsiChar;      (**< mime_type, when known. *)
   end;
 
 const
@@ -495,8 +562,9 @@ const
   AV_PTS_WRAP_ADD_OFFSET  = 1;   ///< add the format specific offset on wrap detection
   AV_PTS_WRAP_SUB_OFFSET  = -1;  ///< subtract the format specific offset on wrap detection
 
-  MAX_STD_TIMEBASES = (60*12+6);
-  MAX_PROBE_PACKETS = 2500;
+  AVSTREAM_EVENT_FLAG_METADATA_UPDATED = $0001; ///< The call resulted in updated metadata.
+
+  MAX_STD_TIMEBASES = (30*12+30+3+6);
   MAX_REORDER_DELAY = 16;
   AV_PROGRAM_RUNNING = 1;
   AVFMTCTX_NOHEADER      = $0001; (**< signal that no header is present
@@ -522,10 +590,15 @@ const
   AVFMT_FLAG_SORT_DTS    = $10000; ///< try to interleave outputted packets by dts (using this flag can slow demuxing down)
   AVFMT_FLAG_PRIV_OPT    = $20000; ///< Enable use of private options by delaying codec open (this could be made default once all code is converted)
   AVFMT_FLAG_KEEP_SIDE_DATA = $40000; ///< Don't merge side data but keep it separate.
+  AVFMT_FLAG_FAST_SEEK   = $80000; ///< Enable fast, but inaccurate seeks for some formats
 
   FF_FDEBUG_TS        = $0001;
 
-  RAW_PACKET_BUFFER_SIZE = 2500000;
+  AVFMT_AVOID_NEG_TS_AUTO              = -1; ///< Enabled when required by target format
+  AVFMT_AVOID_NEG_TS_MAKE_NON_NEGATIVE = 1; ///< Shift timestamps so they are non negative
+  AVFMT_AVOID_NEG_TS_MAKE_ZERO         = 2; ///< Shift timestamps so that they start at 0
+
+  AVFMT_EVENT_FLAG_METADATA_UPDATED    = $0001; ///< The call resulted in updated metadata.
 
 type
   PAVPacketList = ^TAVPacketList;
@@ -656,6 +729,7 @@ type
      * @see avdevice_capabilities_free() for more details.
      *)
     free_device_capabilities : function(s:PAVFormatContext; caps: PAVDeviceCapabilitiesQuery): integer;  cdecl;
+    data_codec : TAVCodecID; (**< default data codec *)
   end;
 
 (**
@@ -733,8 +807,8 @@ type
 
     (**
      * Read the format header and initialize the AVFormatContext
-     * structure. Return 0 if OK. Only used in raw format right
-     * now. 'avformat_new_stream' should be called to create new streams.
+     * structure. Return 0 if OK. 'avformat_new_stream' should be
+     * called to create new streams.
      *)
     read_header: function (c: PAVFormatContext): integer; cdecl;
 
@@ -840,12 +914,15 @@ type
     min_distance: integer;         (**< Minimum distance between this and the previous keyframe, used to avoid unneeded searching. *)
   end;
 
-
-
-
-
-
-
+ (**
+  * Internal.h
+  *)
+  PFFFrac = ^TFFFrac;
+  TFFFrac = record
+    val : int64;
+    num : int64;
+    den : int64;
+  end;
 
  (**
   * Stream structure.
@@ -1007,6 +1084,13 @@ type
      *)
     nb_side_data: integer;
 
+    (**
+     * Flags for the user to detect events happening on the stream. Flags must
+     * be cleared by the user once the event has been handled.
+     * A combination of AVSTREAM_EVENT_FLAG_*.
+     *)
+    event_flags: integer;
+
     (*****************************************************************
      * All fields below this line are not part of the public API. They
      * may not be used outside of libavformat and can be changed and
@@ -1107,6 +1191,30 @@ type
      *)
 	  skip_samples : integer;
 
+    (**
+     * If not 0, the number of samples that should be skipped from the start of
+     * the stream (the samples are removed from packets with pts==0, which also
+     * assumes negative timestamps do not happen).
+     * Intended for use with formats such as mp3 with ad-hoc gapless audio
+     * support.
+     *)
+    start_skip_samples : int64;
+
+    (**
+     * If not 0, the first audio sample that should be discarded from the stream.
+     * This is broken by design (needs global sample count), but can't be
+     * avoided for broken by design formats such as mp3 with ad-hoc gapless
+     * audio support.
+     *)
+    first_discard_sample : int64;
+
+    (**
+     * The sample after last sample that is intended to be discarded after
+     * first_discard_sample. Works on frame boundaries only. Used to prevent
+     * early EOF if the gapless info is broken (considered concatenated mp3s).
+     *)
+    last_discard_sample : int64;
+
 	  (**
      * Number of internally decoded frames, used internally in libavformat, do not access
 	   * its lifetime differs from info which is why it is not in that structure.
@@ -1159,6 +1267,21 @@ type
      *)
     inject_global_side_data : integer;
 
+    (**
+     * String containing paris of key and values describing recommended encoder configuration.
+     * Paris are separated by ','.
+     * Keys are separated from values by '='.
+     *)
+    recommended_encoder_configuration: PAnsiChar;
+
+    (**
+     * display aspect ratio (0 if unknown)
+     * - encoding: unused
+     * - decoding: Set by libavformat to calculate sample_aspect_ratio internally
+     *)
+    display_aspect_ratio: TAVRational;
+
+    priv_pts : PFFFrac;
   end;
 
 
@@ -1208,6 +1331,9 @@ type
    *)
   av_format_control_message = function(s: PAVFormatContext; type_: integer;
 										 data: Pointer; data_size: cardinal): integer; cdecl;
+
+  TAVOpenCallback = function(s: PAVFormatContext; var pb: PAVIOContext; const url: PAnsiChar; flags: integer;
+                              int_cb: PAVIOInterruptCB; var options: PAVDictionary): integer; cdecl;
 
   (**
    * The duration of a video can be estimated through various ways, and this enum can be used
@@ -1368,6 +1494,7 @@ type
      *  AVFMT_FLAG_KEEP_SIDE_DATA  ///< Don't merge side data but keep it separate.
      *)
 
+{$IF FF_API_PROBESIZE_32}
     (**
      * @deprecated deprecated in favor of probesize2
      *)
@@ -1377,6 +1504,8 @@ type
      * @deprecated deprecated in favor of max_analyze_duration2
      *)
     max_analyze_duration : integer;
+{$ENDIF}
+
 
 	  key : PByte;
     keylen : integer;
@@ -1513,6 +1642,28 @@ type
 	  strict_std_compliance : integer;
 
     (**
+     * Flags for the user to detect events happening on the file. Flags must
+     * be cleared by the user once the event has been handled.
+     * A combination of AVFMT_EVENT_FLAG_*.
+     *)
+    event_flags : integer;
+
+    (**
+     * Maximum number of packets to read while waiting for the first timestamp.
+     * Decoding only.
+     *)
+    max_ts_probe : integer;
+
+    (**
+     * Avoid negative timestamps during muxing.
+     * Any value of the AVFMT_AVOID_NEG_TS_* constants.
+     * Note, this only works when using av_interleaved_write_frame. (interleave_packet_per_dts is in use)
+     * - muxing: Set by user
+     * - demuxing: unused
+     */)
+    avoid_negative_ts : integer;
+
+    (**
      * Transport stream id.
      * This will be moved into demuxer private options. Thus no API/ABI compatibility
      *)
@@ -1549,17 +1700,6 @@ type
 	   * - decoding: Set by user via AVOptions (NO direct access)
      *)
     use_wallclock_as_timestamps : integer;
-
-    (**
-     * Avoid negative timestamps during muxing.
-	   *  0 -> allow negative timestamps
-     *  1 -> avoid negative timestamps
-     * -1 -> choose automatically (default)
-     * Note, this only works when interleave_packet_per_dts is in use.
-     * - encoding: Set by user via AVOptions (NO direct access)
-     * - decoding: unused
-	   *)
-    avoid_negative_ts : integer;
 
     (**
      * avio flags, used to force AVIO_FLAG_DIRECT.
@@ -1620,54 +1760,21 @@ type
      *)
 	  format_probesize : integer;
 
-    (*****************************************************************
-     * All fields below this line are not part of the public API. They
-     * may not be used outside of libavformat and can be changed and
-     * removed at will.
-	   * New public fields should be added right above.
-     *****************************************************************
+     (**
+     * ',' separated list of allowed decoders.
+     * If NULL then all are allowed
+     * - encoding: unused
+     * - decoding: set by user through AVOptions (NO direct access)
      *)
+    codec_whitelist : PAnsiChar;
 
     (**
-     * This buffer is only needed when packets were already buffered but
-	   * not decoded, for example to get the codec parameters in MPEG
-     * streams.
+     * ',' separated list of allowed demuxers.
+     * If NULL then all are allowed
+     * - encoding: unused
+     * - decoding: set by user through AVOptions (NO direct access)
      *)
-    packet_buffer : PAVPacketList;
-    packet_buffer_end : PAVPacketList;
-
-	  (* av_seek_frame() support *)
-    data_offset : int64; (**< offset of the first packet *)
-
-    (**
-     * Raw packets from the demuxer, prior to parsing and decoding.
-     * This buffer is used for buffering packets until the codec can
-	   * be identified, as parsing cannot be done without knowing the
-     * codec.
-     *)
-    raw_packet_buffer : PAVPacketList;
-    raw_packet_buffer_end : PAVPacketList;
-    (**
-	   * Packets split by the parser get queued here.
-     *)
-    parse_queue : PAVPacketList;
-    parse_queue_end : PAVPacketList;
-    (**
-     * Remaining size available for raw_packet_buffer, in bytes.
-	   *)
-    raw_packet_buffer_remaining_size : integer;
-
-    (**
-     * Offset to remap timestamps to be non-negative.
-	   * Expressed in timebase units.
-     * @see AVStream.mux_ts_offset
-     *)
-    offset : int64;
-
-    (**
-	   * Timebase for the timestamp offset.
-     *)
-    offset_timebase : TAVRational;
+    format_whitelist : PAnsiChar;
 
     (**
      * An opaque field for libavformat internal usage.
@@ -1707,6 +1814,14 @@ type
      *)
     subtitle_codec : PAVCodec;
 
+    (**
+     * Forced data codec.
+     * This allows forcing a specific decoder, even when there are multiple with
+     * the same codec_id.
+     * Demuxing: Set by user via av_format_set_data_codec (NO direct access).
+     *)
+     data_codec : PAVCodec;
+
 	  (**
      * Number of bytes to be written as padding in a metadata header.
      * Demuxing: Unused.
@@ -1737,17 +1852,58 @@ type
      * from input in avformat_find_stream_info().
      * Demuxing only, set by the caller before avformat_find_stream_info()
      * via AVOptions (NO direct access).
-	   * Can be set to 0 to let avformat choose using a heuristic.
+     * Can be set to 0 to let avformat choose using a heuristic.
      *)
+{$IF FF_API_PROBESIZE_32}
     max_analyze_duration2 : int64;
+{$ELSE}
+    max_analyze_duration : int64;
+{$ENDIF}
 
     (**
      * Maximum size of the data read from input for determining
-	   * the input container format.
-	   * Demuxing only, set by the caller before avformat_open_input()
-	   * via AVOptions (NO direct access).
-	   *)
-	  probesize2  : int64;
+     * the input container format.
+     * Demuxing only, set by the caller before avformat_open_input()
+     * via AVOptions (NO direct access).
+     *)
+{$IF FF_API_PROBESIZE_32}
+    probesize2 : int64;
+{$ELSE}
+    probesize : int64;;
+{$ENDIF}
+
+    (**
+     * dump format separator.
+     * can be ", " or "\n      " or anything else
+     * Code outside libavformat should access this field using AVOptions
+     * (NO direct access).
+     * - muxing: Set by user.
+     * - demuxing: Set by user.
+     *)
+    dump_separator : PByte;
+
+    (**
+     * Forced Data codec_id.
+     * Demuxing: Set by user.
+     *)
+    data_codec_id : TAVCodecID;
+
+    (**
+     * Called to open further IO contexts when needed for demuxing.
+     *
+     * This can be set by the user application to perform security checks on
+     * the URLs before opening them.
+     * The function should behave like avio_open2(), AVFormatContext is provided
+     * as contextual information and to reach AVFormatContext.opaque.
+     *
+     * If NULL then some simple checks are used together with avio_open2().
+     *
+     * Must not be accessed directly from outside avformat.
+     * @See av_format_set_open_cb()
+     *
+     * Demuxing: Set by user.
+     *)
+     open_cb : function(s : PAVFormatContext; var p: PAVIOContext; const url: PAnsiChar; flags: integer; int_cb: PAVIOInterruptCB; var options: PAVDictionary): integer; cdecl;
   end;
 
 
@@ -1763,7 +1919,10 @@ procedure av_stream_set_r_frame_rate(s: PAVStream; r: TAVRational);
   cdecl; external LIB_AVFORMAT;
 function av_stream_get_parser(s: PAVStream): PAVCodecParserContext;
   cdecl; external LIB_AVFORMAT;
-
+function av_stream_get_recommended_encoder_configuration(s: PAVStream): PAnsiChar;
+  cdecl; external LIB_AVFORMAT;
+procedure av_stream_set_recommended_encoder_configuration(s: PAVStream; configuration: PAnsiChar);
+  cdecl; external LIB_AVFORMAT;
 
 (**
  * Returns the pts of the last muxed packet + its duration
@@ -1789,6 +1948,10 @@ function av_format_get_subtitle_codec(s: PAVFormatContext): PAVCodec;
   cdecl; external LIB_AVFORMAT;
 procedure av_format_set_subtitle_codec(s: PAVFormatContext; c: PAVCodec);
   cdecl; external LIB_AVFORMAT;
+function av_format_get_data_codec(s : PAVFormatContext) : PAVCodec;
+  cdecl; external LIB_AVFORMAT;
+procedure av_format_set_data_codec(s: PAVFormatContext; c : PAVCodec);
+  cdecl; external LIB_AVFORMAT;
 function av_format_get_metadata_header_padding(s: PAVFormatContext): integer;
   cdecl; external LIB_AVFORMAT;
 procedure av_format_set_metadata_header_padding(s: PAVFormatContext; c: integer);
@@ -1800,6 +1963,10 @@ procedure av_format_set_opaque(s: PAVFormatContext; opaque: Pointer);
 function av_format_get_control_message_cb(s: PAVFormatContext): av_format_control_message;
   cdecl; external LIB_AVFORMAT;
 procedure av_format_set_control_message_cb(s: PAVFormatContext; callback : av_format_control_message);
+  cdecl; external LIB_AVFORMAT;
+function av_format_get_open_cb(s: PAVFormatContext): TAVOpenCallback;
+  cdecl; external LIB_AVFORMAT;
+procedure av_format_set_open_cb(s: PAVFormatContext; callback: TAVOpenCallback);
   cdecl; external LIB_AVFORMAT;
 
 (**
@@ -1958,18 +2125,6 @@ function av_new_program(s: PAVFormatContext; id: integer): PAVProgram;
  * @}
  *)
 
-
-{$IF FF_API_ALLOC_OUTPUT_CONTEXT}
-(**
- * @deprecated deprecated in favor of avformat_alloc_output_context2()
- *)
-
-function avformat_alloc_output_context(format: PAnsiChar;
-											   oformat: PAVOutputFormat;
-											   filename: PAnsiChar): PAVFormatContext;
-  cdecl; external LIB_AVFORMAT; deprecated 'deprecated in favor of avformat_alloc_output_context2()';
-{$ENDIF}
-
 (**
  * Allocate an AVFormatContext for an output format.
  * avformat_free_context() can be used to free the context and
@@ -2044,7 +2199,7 @@ function av_probe_input_format3(pd: PAVProbeData; is_opened: integer; score_max:
  *
  * @param pb the bytestream to probe
  * @param fmt the input format is put here
- * @param filename the filename of the stream
+ * @param url the url of the stream
  * @param logctx the log context
  * @param offset the offset within the bytestream to probe from
  * @param max_probe_size the maximum probe buffer size (zero for default)
@@ -2053,7 +2208,7 @@ function av_probe_input_format3(pd: PAVProbeData; is_opened: integer; score_max:
  * AVERROR code otherwise
  *)
 function av_probe_input_buffer2(pb: PAVIOContext; fmt: PPAVInputFormat;
-                          filename: PAnsiChar; logctx: Pointer;
+                          url: PAnsiChar; logctx: Pointer;
                           offset: cardinal; max_probe_size: cardinal): integer;
   cdecl; external LIB_AVFORMAT;
 
@@ -2061,7 +2216,7 @@ function av_probe_input_buffer2(pb: PAVIOContext; fmt: PPAVInputFormat;
  * Like av_probe_input_buffer2() but returns 0 on success
  *)
 function  av_probe_input_buffer(pb: PAVIOContext; fmt:  PPAVInputFormat;
-                          filename: PAnsiChar; logctx: Pointer;
+                          url: PAnsiChar; logctx: Pointer;
                           offset: cardinal; max_probe_size: cardinal): integer;
   cdecl; external LIB_AVFORMAT;
 
@@ -2073,7 +2228,7 @@ function  av_probe_input_buffer(pb: PAVIOContext; fmt:  PPAVInputFormat;
  *           May be a pointer to NULL, in which case an AVFormatContext is allocated by this
  *           function and written into ps.
  *           Note that a user-supplied AVFormatContext will be freed on failure.
- * @param filename Name of the stream to open.
+ * @param url URL of the stream to open.
  * @param fmt If non-NULL, this parameter forces a specific input format.
  *            Otherwise the format is autodetected.
  * @param options  A dictionary filled with AVFormatContext and demuxer-private options.
@@ -2084,31 +2239,11 @@ function  av_probe_input_buffer(pb: PAVIOContext; fmt:  PPAVInputFormat;
  *
  * @note If you want to use custom IO, preallocate the format context and set its pb field.
  *)
-function avformat_open_input(var ps: PAVFormatContext; filename: PAnsiChar; fmt: PAVInputFormat; options: PPAVDictionary): integer;
+function avformat_open_input(var ps: PAVFormatContext; url: PAnsiChar; fmt: PAVInputFormat; options: PPAVDictionary): integer;
   cdecl; external LIB_AVFORMAT; (* verified: mail@freehand.com.ua, 2014-08-26: + *)
 
 function av_demuxer_open(ic: PAVFormatContext): integer;
   cdecl; external LIB_AVFORMAT; deprecated;
-
-{$IF FF_API_FORMAT_PARAMETERS}
-(**
- * Read packets of a media file to get stream information. This
- * is useful for file formats with no headers such as MPEG. This
- * function also computes the real framerate in case of MPEG-2 repeat
- * frame mode.
- * The logical file position is not changed by this function;
- * examined packets may be buffered for later processing.
- *
- * @param ic media file handle
- * @return >=0 if OK, AVERROR_xxx on error
- * @todo Let the user decide somehow what information is needed so that
- *       we do not waste time getting stuff the user does not need.
- *
- * @deprecated use avformat_find_stream_info.
- *)
-function av_find_stream_info(ic: PAVFormatContext): integer;
-  cdecl; external LIB_AVFORMAT; deprecated 'use avformat_find_stream_info';
-{$ENDIF}
 
 (**
  * Read packets of a media file to get stream information. This
@@ -2178,25 +2313,6 @@ function av_find_best_stream(ic: PAVFormatContext;
 						            decoder_ret: PAVCodec;
 						            flags: integer): integer;
   cdecl; external LIB_AVFORMAT;
-
-{$IF FF_API_READ_PACKET}
-(**
- * @deprecated use AVFMT_FLAG_NOFILLIN | AVFMT_FLAG_NOPARSE to read raw
- * unprocessed packets
- *
- * Read a transport packet from a media file.
- *
- * This function is obsolete and should never be used.
- * Use av_read_frame() instead.
- *
- * @param s media file handle
- * @param pkt is filled
- * @return 0 if OK, AVERROR_xxx on error
- *)
-
-function av_read_packet(s: PAVFormatContext; pkt: PAVPacket): integer;
-  cdecl; external LIB_AVFORMAT; deprecated 'Use av_read_frame() instead';
-{$ENDIF}
 
 (**
  * Return the next frame of a stream.
@@ -2274,6 +2390,25 @@ function avformat_seek_file(s: PAVFormatContext; stream_index: integer; min_ts: 
   cdecl; external LIB_AVFORMAT;  (* verified: mail@freehand.com.ua, 2014-09-05: + *)
 
 (**
+ * Discard all internally buffered data. This can be useful when dealing with
+ * discontinuities in the byte stream. Generally works only with formats that
+ * can resync. This includes headerless formats like MPEG-TS/TS but should also
+ * work with NUT, Ogg and in a limited way AVI for example.
+ *
+ * The set of streams, the detected duration, stream parameters and codecs do
+ * not change when calling this function. If you want a complete reset, it's
+ * better to open a new AVFormatContext.
+ *
+ * This does not flush the AVIOContext (s->pb). If necessary, call
+ * avio_flush(s->pb) before calling this function.
+ *
+ * @param s media file handle
+ * @return >=0 on success, error code otherwise
+ *)
+function avformat_flush(s: PAVFormatContext): integer;
+  cdecl; external LIB_AVFORMAT;
+
+(**
  * Start playing a network-based stream (e.g. RTSP stream) at the
  * current position.
  *)
@@ -2288,17 +2423,6 @@ function av_read_play(s: PAVFormatContext): integer;
 function av_read_pause(s: PAVFormatContext): integer;
   cdecl; external LIB_AVFORMAT;
 
-{$IF FF_API_CLOSE_INPUT_FILE}
-(**
- * @deprecated use avformat_close_input()
- * Close a media file (but not its codecs).
- *
- * @param s media file handle
- *)
-procedure av_close_input_file(s: PAVFormatContext);
-  cdecl; external LIB_AVFORMAT; deprecated;
-{$ENDIF}
-
 (**
  * Close an opened input AVFormatContext. Free it and all its contents
  * and set *s to NULL.
@@ -2308,32 +2432,6 @@ procedure avformat_close_input(var s: PAVFormatContext);
 (**
  * @}
  *)
-
-{$IF FF_API_NEW_STREAM}
-(**
- * Add a new stream to a media file.
- *
- * Can only be called in the read_header() function. If the flag
- * AVFMTCTX_NOHEADER is in the format context, then new streams
- * can be added in read_packet too.
- *
- * @param s media file handle
- * @param id file-format-dependent stream ID
- *)
-
-function av_new_stream(s: PAVFormatContext; id: integer): PAVStream;
-  cdecl; external LIB_AVFORMAT; deprecated;
-{$ENDIF}
-
-{$IF FF_API_SET_PTS_INFO}
-(**
- * @deprecated this function is not supposed to be called outside of lavf
- *)
-
-procedure av_set_pts_info(s: PAVStream; pts_wrap_bits: integer;
-					 pts_num: cardinal; pts_den: cardinal);
-  cdecl; external LIB_AVFORMAT; deprecated 'this function is not supposed to be called outside of lavf';
-{$ENDIF}
 
 const
   AVSEEK_FLAG_BACKWARD = 1; ///< seek backward
@@ -2447,7 +2545,7 @@ function av_write_uncoded_frame(s: PAVFormatContext; stream_index: integer;
 (**
  * Write a uncoded frame to an output media file.
  *
- * If the muxer supports it, this function allows to write an AVFrame
+ * If the muxer supports it, this function makes it possible to write an AVFrame
  * structure directly, without encoding it into a packet.
  * It is mostly useful for devices and similar special muxers that use raw
  * video or PCM data and will not serialize it into a byte stream.

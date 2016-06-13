@@ -221,7 +221,13 @@ procedure sws_freeContext(swsContext: PSwsContext);
  * @param dstW the width of the destination image
  * @param dstH the height of the destination image
  * @param dstFormat the destination image format
- * @param flags specify which algorithm and options to use for rescaling
+ * @param flags specify which algorithm and options to use for rescaling 
+ * @param param extra parameters to tune the used scaler
+ *              For SWS_BICUBIC param[0] and [1] tune the shape of the basis
+ *              function, param[0] tunes f(1) and param[1] fВґ(1)
+ *              For SWS_GAUSS param[0] tunes the exponent and thus cutoff
+ *              frequency
+ *              For SWS_LANCZOS param[0] tunes the width of the window function
  * @return a pointer to an allocated context, or NULL in case of error
  * @note this function is to be removed after a saner alternative is
  *       written

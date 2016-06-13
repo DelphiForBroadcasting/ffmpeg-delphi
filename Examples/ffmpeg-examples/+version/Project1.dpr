@@ -6,14 +6,14 @@ program Project1;
 
 uses
   System.SysUtils,
-  avutil in '../../../libavutil/avutil.pas',
-  avcodec in '../../../libavcodec/avcodec.pas',
-  avformat in '../../../libavformat/avformat.pas',
-  avfilter in '../../../libavfilter/avfilter.pas',
-  swresample in '../../../libswresample/swresample.pas',
-  postprocess in '../../../libpostproc/postprocess.pas',
-  avdevice in '../../../libavdevice/avdevice.pas',
-  swscale in '../../../libswscale/swscale.pas';
+  avutil in '../../../Include/libavutil/avutil.pas',
+  avcodec in '../../../Include/libavcodec/avcodec.pas',
+  avformat in '../../../Include/libavformat/avformat.pas',
+  avfilter in '../../../Include/libavfilter/avfilter.pas',
+  swresample in '../../../Include/libswresample/swresample.pas',
+  postprocess in '../../../Include/libpostproc/postprocess.pas',
+  avdevice in '../../../Include/libavdevice/avdevice.pas',
+  swscale in '../../../Include/libswscale/swscale.pas';
 
 
 
@@ -86,6 +86,14 @@ begin
       MINOR:= VERSION shr 8 and $ff;
       MICRO:= VERSION and $ff;
       writeln(format('LIB_SWSCALE:    %s.dll     %s', [LIB_SWSCALE, AV_VERSION(MAJOR, MINOR, MICRO)]));
+    end;
+    if System.SysUtils.FileExists(format('%s.dll', [LIB_SWRESAMPLE])) then
+    begin
+      VERSION:=swresample_version();
+      MAJOR:= VERSION shr 16;
+      MINOR:= VERSION shr 8 and $ff;
+      MICRO:= VERSION and $ff;
+      writeln(format('LIB_SWRESAMPLE:    %s.dll     %s', [LIB_SWRESAMPLE, AV_VERSION(MAJOR, MINOR, MICRO)]));
     end;
 
     readln;

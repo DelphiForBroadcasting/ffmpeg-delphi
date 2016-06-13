@@ -24,8 +24,6 @@
  *)
 
 
-{$INCLUDE avconfig.pas}
-
 function MKTAG(a, b, c, d: AnsiChar): integer; inline;
 
 function MKBETAG(a, b, c, d: AnsiChar): integer; inline;

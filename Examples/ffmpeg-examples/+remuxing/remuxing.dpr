@@ -152,7 +152,7 @@ begin
       end;
       out_stream.codec.codec_tag := 0;
       if (ofmt_ctx.oformat.flags and AVFMT_GLOBALHEADER) <> 0 then
-        out_stream.codec.flags := out_stream.codec.flags or CODEC_FLAG_GLOBAL_HEADER;
+        out_stream.codec.flags := out_stream.codec.flags or AV_CODEC_FLAG_GLOBAL_HEADER;
     end;
     av_dump_format(ofmt_ctx, 0, PAnsiChar(ansistring(out_filename)), 1);
 

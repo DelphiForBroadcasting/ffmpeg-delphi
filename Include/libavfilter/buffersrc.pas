@@ -62,6 +62,7 @@ type
 
   );
 
+{$IF FF_API_AVFILTERBUFFER}
 (**
  * Add buffer data in picref to buffer_src.
  *
@@ -73,7 +74,8 @@ type
  *)
 function av_buffersrc_add_ref(buffer_src: PAVFilterContext;
                          picref: PAVFilterBufferRef; flags: integer): integer;
-    cdecl; external LIB_AVFILTER;
+    cdecl; external LIB_AVFILTER; deprecated;
+{$ENDIF}
 
 (**
  * Get the number of failed requests.

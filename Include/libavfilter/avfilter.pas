@@ -311,7 +311,6 @@ procedure avfilter_unref_buffer(ref: PAVFilterBufferRef); deprecated '';
  *)
 procedure avfilter_unref_bufferp(var ref: PAVFilterBufferRef); deprecated '';
     cdecl; external LIB_AVFILTER;
-{$ENDIF}
 
 (**
  * Get the number of channels of a buffer reference.
@@ -319,6 +318,7 @@ procedure avfilter_unref_bufferp(var ref: PAVFilterBufferRef); deprecated '';
 
 function avfilter_ref_get_channels(ref: PAVFilterBufferRef): integer; deprecated '';
     cdecl; external LIB_AVFILTER;
+{$ENDIF}
 
 type
   PPAVFilterContext = ^PAVFilterContext;
@@ -797,7 +797,9 @@ type
     (** stage of the initialization of the link properties (dimensions, etc) *)
     init_state: TInit_state;
 
+{$IF FF_API_AVFILTERBUFFER}
     pool : PAVFilterPool;
+{$ENDIF}
 
     (**
      * Graph the filter belongs to.
@@ -853,6 +855,7 @@ type
      *)
     max_samples : integer;
 
+{$IF FF_API_AVFILTERBUFFER}
     (**
      * The buffer reference currently being received across the link by the
      * destination filter. This is used internally by the filter system to
@@ -861,6 +864,7 @@ type
      * by the filters.
      *)
     cur_buf_copy : PAVFilterBufferRef;
+{$ENDIF}
 
     (**
      * True if the link is closed.
@@ -1015,8 +1019,6 @@ type
 {$INCLUDE asrc_abuffer.pas}
 
 {$INCLUDE avcodec_filter.pas}
-
-{$INCLUDE internal.pas}
 
 (**
  * Get the number of elements in a NULL-terminated array of AVFilterPads (e.g.
@@ -1341,6 +1343,8 @@ function avfilter_get_class(): PAVClass;
 
 (**
  * Allocate a filter graph.
+ *
+ * @return the allocated filter graph on success or NULL.
  *)
 function avfilter_graph_alloc(): PAVFilterGraph;
     cdecl; external LIB_AVFILTER; (* verified: mail@freehand.com.ua, 2014-09-15: + *)
@@ -1483,7 +1487,7 @@ function avfilter_inout_alloc(): PAVFilterInOut;
 procedure avfilter_inout_free(var inout : PAVFilterInOut);
     cdecl; external LIB_AVFILTER; (* verified: mail@freehand.com.ua, 2014-09-15: + *)
 
-{$IF AV_HAVE_INCOMPATIBLE_LIBAV_ABI OR (NOT FF_API_OLD_GRAPH_PARSE)}
+{$IF DEFINED(AV_HAVE_INCOMPATIBLE_LIBAV_ABI) OR NOT DEFINED(FF_API_OLD_GRAPH_PARSE)}
 (**
  * Add a graph described by a string to a graph.
  *
@@ -1531,6 +1535,10 @@ function avfilter_graph_parse(graph: PAVFilterGraph; filters : PAnsiChar;
 
 (**
  * Add a graph described by a string to a graph.
+ *
+ * In the graph filters description, if the input label of the first
+ * filter is not specified, "in" is assumed; if the output label of
+ * the last filter is not specified, "out" is assumed.
  *
  * @param graph   the filter graph where to link the parsed graph context
  * @param filters string to be parsed

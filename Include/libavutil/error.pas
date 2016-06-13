@@ -108,6 +108,15 @@ const
   AVERROR_BUG2               = -(ord('B') or (ord('U') shl 8) or (ord('G') shl 16) or (ord(' ') shl 24));
   AVERROR_UNKNOWN            = -(ord('U') or (ord('N') shl 8) or (ord('K') shl 16) or (ord('N') shl 24)); ///< Unknown error, typically from an external library
   AVERROR_EXPERIMENTAL       = -($2bb2afa8);                                                              ///< Requested feature is flagged experimental. Set strict_std_compliance if you really want to use it.
+  AVERROR_INPUT_CHANGED      = (-$636e6701); ///< Input changed between calls. Reconfiguration is required. (can be OR-ed with AVERROR_OUTPUT_CHANGED)
+  AVERROR_OUTPUT_CHANGED     = (-$636e6702); ///< Output changed between calls. Reconfiguration is required. (can be OR-ed with AVERROR_INPUT_CHANGED)
+  (* HTTP & RTSP errors *)
+  AVERROR_HTTP_BAD_REQUEST   = -(ord($F8) or (ord('4') shl 8) or (ord('0') shl 16) or (ord('0') shl 24)); //FFERRTAG(0xF8,'4','0','0')
+  AVERROR_HTTP_UNAUTHORIZED  = -(ord($F8) or (ord('4') shl 8) or (ord('0') shl 16) or (ord('1') shl 24)); //FFERRTAG(0xF8,'4','0','1')
+  AVERROR_HTTP_FORBIDDEN     = -(ord($F8) or (ord('4') shl 8) or (ord('0') shl 16) or (ord('3') shl 24)); //FFERRTAG(0xF8,'4','0','3')
+  AVERROR_HTTP_NOT_FOUND     = -(ord($F8) or (ord('4') shl 8) or (ord('0') shl 16) or (ord('4') shl 24)); //FFERRTAG(0xF8,'4','0','4')
+  AVERROR_HTTP_OTHER_4XX     = -(ord($F8) or (ord('4') shl 8) or (ord('X') shl 16) or (ord('X') shl 24)); //FFERRTAG(0xF8,'4','X','X')
+  AVERROR_HTTP_SERVER_ERROR  = -(ord($F8) or (ord('5') shl 8) or (ord('X') shl 16) or (ord('X') shl 24)); //FFERRTAG(0xF8,'5','X','X')
 
   AV_ERROR_MAX_STRING_SIZE   = 64;
 

@@ -21,6 +21,20 @@
 {$ifndef AVUTIL_TIME_H}
 {$define AVUTIL_TIME_H}
 
+type
+  PTm = ^TTm;
+  TTm = record
+    tm_sec	  : integer;	// seconds after the minute	0-61*
+    tm_min	  : integer;	// minutes after the hour	0-59
+    tm_hour	  : integer;	// hours since midnight	0-23
+    tm_mday	  : integer;	// day of the month	1-31
+    tm_mon	  : integer;	// months since January	0-11
+    tm_year	  : integer;	// years since 1900
+    tm_wday	  : integer;	// days since Sunday	0-6
+    tm_yday	  : integer;	// days since January 1	0-365
+    tm_isdst	: integer;	// Daylight Saving Time flag
+  end;
+
 (**
  * Get the current time in microseconds.
  *)
@@ -31,8 +45,8 @@ function av_gettime(): int64;
  * Get the current time in microseconds since some unspecified starting point.
  * On platforms that support it, the time comes from a monotonic clock
  * This property makes this time source ideal for measuring relative time.
- * If a monotonic clock is not available on the targeted platform, the
- * implementation fallsback on using av_gettime().
+ * The returned values may not be monotonic on platforms where a monotonic
+ * clock is not available.
  *)
 function av_gettime_relative(): int64;
   cdecl; external LIB_AVUTIL;

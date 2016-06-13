@@ -134,14 +134,6 @@ function av_get_planar_sample_fmt(sample_fmt: TAVSampleFormat): TAVSampleFormat;
 function av_get_sample_fmt_string(buf: PAnsiChar; buf_size: integer; sample_fmt: TAVSampleFormat): PAnsiChar;
   cdecl; external LIB_AVUTIL;
 
-{$IF FF_API_GET_BITS_PER_SAMPLE_FMT}
-(**
- * @deprecated Use av_get_bytes_per_sample() instead.
- *)
-function av_get_bits_per_sample_fmt(sample_fmt: TAVSampleFormat): integer;
-  cdecl; external LIB_AVUTIL; deprecated 'Use av_get_bytes_per_sample()';
-{$ENDIF}
-
 (**
  * Return number of bytes per sample.
  *
