@@ -2310,7 +2310,7 @@ function av_find_best_stream(ic: PAVFormatContext;
                         type_: TAVMediaType;
 						            wanted_stream_nb: integer;
                         related_stream: integer;
-						            decoder_ret: PAVCodec;
+						            decoder_ret: PPAVCodec;
 						            flags: integer): integer;
   cdecl; external LIB_AVFORMAT;
 
